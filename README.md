@@ -37,18 +37,63 @@ Platform ini bertindak sebagai "brankas" terpusat di mana *developer* dapat meng
 - PostgreSQL (Production) / SQLite (Local Development)
 - AWS S3 / Firebase Storage (untuk *cloud file hosting*)
 
+## 🧱 Struktur Proyek Saat Ini
+
+```text
+DevStash/
+├── backend/
+│   └── app.py
+├── frontend/
+│   ├── package.json
+│   ├── .env.example
+│   └── src/
+│       ├── app/
+│       └── components/
+└── README.md
+```
+
 ## 🚀 Instalasi & Cara Penggunaan (Getting Started)
 
 Untuk menjalankan proyek ini secara lokal, ikuti langkah-langkah berikut:
 
 ### Prasyarat
 - Python 3.9+
-- Node.js & npm
-- PostgreSQL (opsional untuk *local dev*)
+- Node.js 20+
+- npm
 
-### Langkah Instalasi
+### Backend Flask
 
-1. **Clone repository ini**
+1. Buat virtual environment lalu install dependency Flask yang dibutuhkan.
+2. Jalankan API dari folder `backend`.
+3. Health check tersedia di `GET /api/health`.
+
+Contoh alur:
+
 ```bash
-   git clone [https://github.com/username-kamu/DevStash.git](https://github.com/username-kamu/DevStash.git)
-   cd DevStash
+cd backend
+python -m venv .venv
+.venv\Scripts\activate
+pip install flask flask-cors
+python app.py
+```
+
+### Frontend Next.js
+
+1. Masuk ke folder `frontend`.
+2. Salin `.env.example` menjadi `.env.local`.
+3. Install dependency lalu jalankan development server.
+
+```bash
+cd frontend
+copy .env.example .env.local
+npm install
+npm run dev
+```
+
+Frontend starter sudah menggunakan Next.js App Router, TypeScript, dan Tailwind CSS dengan dark dashboard awal yang siap dihubungkan ke backend Flask.
+
+### Catatan Integrasi
+
+- Base URL API frontend disiapkan melalui `NEXT_PUBLIC_API_URL`.
+- Endpoint awal backend: `http://127.0.0.1:5000/api/health`
+- Target deployment frontend tetap kompatibel untuk Vercel.
