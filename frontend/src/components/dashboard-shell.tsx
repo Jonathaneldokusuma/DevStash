@@ -1,3 +1,7 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
 const navigation = [
   { label: "Dashboard", icon: "dashboard", active: true },
   { label: "Assets", icon: "assets" },
@@ -13,7 +17,7 @@ const quickActions = [
   { label: "Kategori Baru", icon: "folder" },
 ];
 
-const recentAssets = [
+const fallbackRecentAssets: RecentAsset[] = [
   {
     title: "Auth_Middleware_V2.ts",
     description: "Protokol keamanan untuk sistem autentikasi dan route guard tim.",
@@ -48,7 +52,7 @@ const recentAssets = [
   },
 ];
 
-const heatmap = [
+const fallbackHeatmap = [
   [2, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 2, 0, 1, 0, 0, 2, 1, 0, 0, 0, 0, 1, 0, 2, 2, 0, 1, 1, 0, 0, 0, 2, 0, 0, 1, 0, 2, 0, 0, 0, 1, 0, 2, 0, 0],
   [2, 0, 1, 0, 0, 1, 0, 0, 2, 1, 1, 0, 0, 0, 1, 0, 2, 0, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0, 0, 2, 0, 1, 0, 2, 1, 0, 1, 0, 0, 2, 0, 1, 0, 0, 0, 2, 1],
   [0, 2, 2, 1, 2, 0, 0, 0, 1, 2, 0, 1, 0, 0, 0, 0, 1, 2, 0, 2, 0, 0, 1, 1, 0, 2, 0, 1, 0, 0, 0, 0, 2, 0, 0, 1, 0, 2, 1, 0, 0, 1, 0, 2, 0, 0, 2, 0],
@@ -56,7 +60,95 @@ const heatmap = [
   [2, 0, 2, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 2, 0, 0, 1, 1, 0, 0, 2, 0, 1, 0, 2, 0, 0, 0, 0, 1, 0, 2, 0, 1, 2, 0, 2, 0, 1, 0, 0, 0, 2, 0, 0, 1],
 ];
 
-const monthLabels = ["Januari", "Maret", "Juni", "September", "Desember"];
+const fallbackMonthLabels = ["Januari", "Maret", "Juni", "September", "Desember"];
+
+const fallbackStorageBreakdown: StorageBreakdownItem[] = [
+  { label: "Skrip & Dokumentasi", value: "1.2 GB", percent: 30, tone: "primary" },
+  { label: "Aset Gambar & UI", value: "2.4 GB", percent: 55, tone: "secondary" },
+  { label: "Library Audio", value: "0.6 GB", percent: 15, tone: "tertiary" },
+];
+
+const fallbackDashboard: DashboardPayload = {
+  summary: {
+    usedStorage: "4.2 GB",
+    totalStorage: "10 GB",
+    usagePercent: 42,
+    contributorsActive: 6,
+    lastSync: "Baru saja",
+  },
+  storageBreakdown: fallbackStorageBreakdown,
+  recentAssets: fallbackRecentAssets,
+  heatmap: fallbackHeatmap,
+  monthLabels: fallbackMonthLabels,
+};
+
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:5000").replace(/\/$/, "");
+
+type AssetTone = "primary" | "secondary" | "tertiary" | "warm";
+
+type RecentAsset = {
+  title: string;
+  description: string;
+  meta: string;
+  badge: string;
+  tone: AssetTone;
+  art: string;
+};
+
+type StorageBreakdownItem = {
+  label: string;
+  value: string;
+  percent: number;
+  tone: "primary" | "secondary" | "tertiary";
+};
+
+type DashboardPayload = {
+  summary: {
+    usedStorage: string;
+    totalStorage: string;
+    usagePercent: number;
+    contributorsActive: number;
+    lastSync: string;
+  };
+  storageBreakdown: StorageBreakdownItem[];
+  recentAssets: RecentAsset[];
+  heatmap: number[][];
+  monthLabels: string[];
+};
+
+type HealthPayload = {
+  status: string;
+  message: string;
+  timestamp?: string;
+};
+
+function getToneClasses(tone: AssetTone) {
+  if (tone === "secondary") {
+    return "rounded-sm bg-secondary/15 px-2.5 py-1 font-mono text-xs uppercase tracking-[0.12em] text-secondary";
+  }
+
+  if (tone === "tertiary") {
+    return "rounded-sm bg-tertiary/15 px-2.5 py-1 font-mono text-xs uppercase tracking-[0.12em] text-tertiary";
+  }
+
+  if (tone === "warm") {
+    return "rounded-sm bg-[#b48b94]/15 px-2.5 py-1 font-mono text-xs uppercase tracking-[0.12em] text-[#d3a9b2]";
+  }
+
+  return "rounded-sm bg-primary/15 px-2.5 py-1 font-mono text-xs uppercase tracking-[0.12em] text-primary";
+}
+
+function getBarClasses(tone: StorageBreakdownItem["tone"]) {
+  if (tone === "secondary") {
+    return "bg-secondary";
+  }
+
+  if (tone === "tertiary") {
+    return "bg-tertiary";
+  }
+
+  return "bg-primary";
+}
 
 function Icon({ name, className = "h-5 w-5" }: { name: string; className?: string }) {
   const baseProps = {
@@ -254,6 +346,55 @@ function HeatmapCell({ value }: { value: number }) {
 }
 
 export function DashboardShell() {
+  const [dashboard, setDashboard] = useState<DashboardPayload>(fallbackDashboard);
+  const [apiStatus, setApiStatus] = useState<"checking" | "online" | "offline">("checking");
+  const [apiMessage, setApiMessage] = useState("Menghubungkan dashboard ke backend Flask...");
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadDashboard() {
+      try {
+        const [healthResponse, dashboardResponse] = await Promise.all([
+          fetch(`${API_BASE_URL}/api/health`, {
+            method: "GET",
+            headers: { Accept: "application/json" },
+            signal: controller.signal,
+          }),
+          fetch(`${API_BASE_URL}/api/dashboard`, {
+            method: "GET",
+            headers: { Accept: "application/json" },
+            signal: controller.signal,
+          }),
+        ]);
+
+        if (!healthResponse.ok) {
+          throw new Error("Health check gagal.");
+        }
+
+        const health = (await healthResponse.json()) as HealthPayload;
+        setApiStatus(health.status === "ok" ? "online" : "offline");
+        setApiMessage(health.message);
+
+        if (dashboardResponse.ok) {
+          const payload = (await dashboardResponse.json()) as DashboardPayload;
+          setDashboard(payload);
+        }
+      } catch (error) {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        setApiStatus("offline");
+        setApiMessage(error instanceof Error ? error.message : "Backend Flask belum tersedia.");
+      }
+    }
+
+    void loadDashboard();
+
+    return () => controller.abort();
+  }, []);
+
   return (
     <div className="min-h-screen bg-background bg-vault text-text">
       <aside className="glass-panel relative z-20 flex min-h-screen flex-col border-r border-white/5 px-5 py-4 lg:fixed lg:inset-y-0 lg:left-0 lg:w-72">
@@ -347,26 +488,42 @@ export function DashboardShell() {
               <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                 <div>
                   <h1 className="font-display text-4xl font-bold tracking-tight text-text">Ikhtisar Penyimpanan</h1>
-                  <p className="mt-2 text-base text-muted">4.2 GB dari 10 GB telah digunakan</p>
+                  <p className="mt-2 text-base text-muted">
+                    {dashboard.summary.usedStorage} dari {dashboard.summary.totalStorage} telah digunakan
+                  </p>
                 </div>
                 <span className="inline-flex items-center rounded-full border border-primary/30 bg-primaryStrong/15 px-4 py-2 font-mono text-sm tracking-[0.12em] text-primary">
-                  42% Kapasitas
+                  {dashboard.summary.usagePercent}% Kapasitas
                 </span>
               </div>
 
+              <div className="mb-6 flex flex-wrap items-center gap-3 font-mono text-xs uppercase tracking-[0.14em]">
+                <span
+                  className={
+                    apiStatus === "online"
+                      ? "rounded-full border border-secondary/30 bg-secondary/10 px-3 py-2 text-secondary"
+                      : apiStatus === "offline"
+                        ? "rounded-full border border-red-400/30 bg-red-400/10 px-3 py-2 text-red-200"
+                        : "rounded-full border border-primary/30 bg-primary/10 px-3 py-2 text-primary"
+                  }
+                >
+                  API {apiStatus === "online" ? "Online" : apiStatus === "offline" ? "Offline" : "Checking"}
+                </span>
+                <span className="text-muted">{apiMessage}</span>
+              </div>
+
               <div className="space-y-8 font-mono text-sm">
-                {[
-                  { label: "Skrip & Dokumentasi", value: "1.2 GB", width: "w-[30%]", bar: "bg-primary" },
-                  { label: "Aset Gambar & UI", value: "2.4 GB", width: "w-[55%]", bar: "bg-secondary" },
-                  { label: "Library Audio", value: "0.6 GB", width: "w-[15%]", bar: "bg-tertiary" },
-                ].map((item) => (
+                {dashboard.storageBreakdown.map((item) => (
                   <div key={item.label} className="space-y-3">
                     <div className="flex items-center justify-between text-muted">
                       <span>{item.label}</span>
                       <span className="font-semibold text-text">{item.value}</span>
                     </div>
                     <div className="h-3 overflow-hidden rounded-full bg-surfacePanelHighest/35">
-                      <div className={`h-full ${item.width} ${item.bar} shadow-[0_0_14px_rgba(195,192,255,0.28)]`} />
+                      <div
+                        className={`h-full ${getBarClasses(item.tone)} shadow-[0_0_14px_rgba(195,192,255,0.28)]`}
+                        style={{ width: `${item.percent}%` }}
+                      />
                     </div>
                   </div>
                 ))}
@@ -403,7 +560,7 @@ export function DashboardShell() {
                     {user.initials}
                   </span>
                 ))}
-                <span className="text-xl text-muted">+3 Kolaborator Aktif</span>
+                <span className="text-xl text-muted">+{dashboard.summary.contributorsActive} Kolaborator Aktif</span>
               </div>
             </aside>
           </section>
@@ -418,22 +575,12 @@ export function DashboardShell() {
             </div>
 
             <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-              {recentAssets.map((asset) => (
+              {dashboard.recentAssets.map((asset) => (
                 <article key={asset.title} className="glass-panel overflow-hidden rounded-xl transition hover:-translate-y-1 hover:border-primary/25">
                   <AssetPreview art={asset.art} />
                   <div className="space-y-4 p-5">
                     <div className="flex items-center justify-between gap-3">
-                      <span
-                        className={
-                          asset.tone === "secondary"
-                            ? "rounded-sm bg-secondary/15 px-2.5 py-1 font-mono text-xs uppercase tracking-[0.12em] text-secondary"
-                            : asset.tone === "tertiary"
-                              ? "rounded-sm bg-tertiary/15 px-2.5 py-1 font-mono text-xs uppercase tracking-[0.12em] text-tertiary"
-                              : asset.tone === "warm"
-                                ? "rounded-sm bg-[#b48b94]/15 px-2.5 py-1 font-mono text-xs uppercase tracking-[0.12em] text-[#d3a9b2]"
-                                : "rounded-sm bg-primary/15 px-2.5 py-1 font-mono text-xs uppercase tracking-[0.12em] text-primary"
-                        }
-                      >
+                      <span className={getToneClasses(asset.tone)}>
                         {asset.badge}
                       </span>
                       <span className="font-mono text-sm text-muted">{asset.meta}</span>
@@ -466,7 +613,7 @@ export function DashboardShell() {
 
             <div className="overflow-x-auto">
               <div className="grid min-w-[880px] gap-2">
-                {heatmap.map((row, rowIndex) => (
+                {dashboard.heatmap.map((row, rowIndex) => (
                   <div key={rowIndex} className="flex gap-2">
                     {row.map((value, columnIndex) => (
                       <HeatmapCell key={`${rowIndex}-${columnIndex}`} value={value} />
@@ -477,7 +624,7 @@ export function DashboardShell() {
             </div>
 
             <div className="mt-8 grid grid-cols-5 font-mono text-sm text-muted">
-              {monthLabels.map((month) => (
+              {dashboard.monthLabels.map((month) => (
                 <span key={month}>{month}</span>
               ))}
             </div>
